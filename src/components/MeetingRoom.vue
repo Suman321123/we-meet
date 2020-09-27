@@ -35,6 +35,25 @@
     </div>
   </section>
   <section class="meetingRoom-container-right">
+    <div class="meetingRoom-container-right-top">
+      <h2 class="meetingRoom-container-right-top-heading">Meeting details</h2>
+    </div>
+    <div class="meetingRoom-container-right-middle">
+      <button class="meetingRoom-container-right-middle-tabs">
+        <span class="meetingRoom-container-right-middle-tabs-people">
+          <img src="../assets/group-icon.svg" alt="people">
+          People
+        </span>
+      </button>
+      <button class="meetingRoom-container-right-middle-tabs">
+        <span class="meetingRoom-container-right-middle-tabs-chat">
+          <img src="../assets/keyboard.svg" alt="chat">
+          Chat
+        </span>
+      </button>
+    </div>
+    <div class="meetingRoom-container-right-bottom">
+    </div>
   </section>
 </div>  
 </template>
@@ -48,7 +67,7 @@ export default {
     return  {
       localVideoStream: '',
       peerRef: '',
-      usersList: [],
+      userMediaConnectionList: [],
       currentUserId: '',
       toggleMicValue: true,
       toggleVideoValue: true,
@@ -83,7 +102,7 @@ export default {
         console.log('close')
         videoElement.remove()
       })
-      this.usersList[userId] = mediaConnection
+      this.userMediaConnectionList[userId] = mediaConnection
     },
 
     createVideoElement (userId) {
@@ -105,11 +124,11 @@ export default {
       const videoElement = document.getElementById(`video-${this.currentUserId}`)
       stream.getTracks()[0].onended = (event) => {
         videoElement.srcObject = this.localVideoStream
-        for (const item in this.usersList) {
+        for (const item in this.userMediaConnectionList) {
           this.peerRef.call(item, this.localVideoStream)
         }
       }
-      for (const item in this.usersList) {
+      for (const item in this.userMediaConnectionList) {
         this.peerRef.call(item, stream)
       }
       videoElement.srcObject = stream
@@ -138,9 +157,9 @@ export default {
         this.getMedia()
       })
 
-      this.sockets.subscribe('peer-disconnected', (peerId) => {
-        if (this.usersList[peerId]) {
-          this.usersList[peerId].close()
+      this.sockets.subscribe('peer-disconnected', (userId) => {
+        if (this.userMediaConnectionList[userId]) {
+          this.userMediaConnectionList[userId].close()
         }
       });
     },
@@ -155,22 +174,22 @@ export default {
         this.localVideoStream = stream
         this.setControlValue()
         this.addVideoStream(myVideo, stream)
-        this.peerRef.on('call', (call) => {
-          if (!this.usersList[call.peer]) {
-            this.usersList[call.peer] = call
+        this.peerRef.on('call', (mediaConnection) => {
+          if (!this.userMediaConnectionList[mediaConnection.peer]) {
+            this.userMediaConnectionList[mediaConnection.peer] = mediaConnection
           }
-          call.answer(stream)
+          mediaConnection.answer(stream)
           let videoElement
-          const remoteVideoElement = document.getElementById(`video-${call.peer}`)
-          call.on('stream', (stream) => {
+          const remoteVideoElement = document.getElementById(`video-${mediaConnection.peer}`)
+          mediaConnection.on('stream', (stream) => {
             if (remoteVideoElement) {
               remoteVideoElement.srcObject = stream
             } else {
-              videoElement = this.createVideoElement(call.peer)
+              videoElement = this.createVideoElement(mediaConnection.peer)
               this.addVideoStream(videoElement, stream)
             }
           })
-          call.on('close', () => {
+          mediaConnection.on('close', () => {
             videoElement.remove()
           })
         })
@@ -178,6 +197,7 @@ export default {
           this.addNewUserToRoom(peerId, stream)
         })
       } catch (err) {
+        alert(err)
         console.log(err)
       }
     },
@@ -220,6 +240,57 @@ $box-shadow: 0 1px 3px 0 rgba(60,64,67,0.302), 0 4px 8px 3px rgba(60,64,67,0.149
     }
     &-right {
       flex: 0.25;
+      &-top {
+        height: 65px;
+        min-height: 64px;
+        padding-left: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        &-heading {
+          text-align: left;
+          font-size: 1.05rem;
+        }
+      }
+      &-middle {
+        display: flex;
+        justify-content: center;
+        height: 50px;
+        min-height: 50px;
+        border-bottom: 1px solid rgb(219, 219, 219);
+        &-tabs {
+          flex: 1;
+          background-color: transparent;
+          outline: none;
+          border: 0px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          font-weight: 500;
+          height: 100%;
+          &:hover {
+            background-color: rgba(121, 0, 40, 0.039);
+          }
+          img {
+            width: 18px;
+            height: 18px;
+            margin: 0px 8px;  
+          }
+          &-people {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #f0154b;
+            border-bottom: 3px solid #f0154b;
+            height: 100%;
+          }
+          &-chat {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+          }
+        }
+      }
     }
   }
   &-footer {
@@ -329,6 +400,7 @@ $box-shadow: 0 1px 3px 0 rgba(60,64,67,0.302), 0 4px 8px 3px rgba(60,64,67,0.149
       height: 300px;
       width: 400px;
       object-fit: cover;
+      transform: scaleX(-1);
     }
   }
 }

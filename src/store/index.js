@@ -13,9 +13,10 @@ export default new Vuex.Store({
   },
   actions: {
     getRoomId({commit}, {success}) {
-      Vue.http.get("http://localhost:9000/getRoomId").then((res) => {
+      Vue.http.get("http://192.168.0.101:9000/getRoomId").then((res) => {
         success && success(res.body)
       }).catch((err) => {
+        alert(JSON.stringify(err))
         console.log(err)
       })
     }
