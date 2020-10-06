@@ -10,15 +10,27 @@
     </div>
     <div class="navbar-right">
       <div class="navbar-right-user-logo">
-        S
+        {{ getInitials }}
       </div>
     </div>
   </nav>
 </template>
 
 <script>
+import { mapGetters } from 'vuex'
 export default {
   name: 'NavBar',
+  computed: {
+    ...mapGetters([
+      'userInfo'
+    ]),
+    getInitials () {
+      if (this.userInfo.userName) {
+        return this.userInfo.userName.match(/(\b\S)?/g).join("").toUpperCase()  
+      }
+      return 'SS'
+    }
+  },
 }
 </script>
 
@@ -73,7 +85,7 @@ export default {
         height: 25px;
 
         color: #fff;
-        font-size: 1.4rem;
+        font-size: 1rem;
         font-weight: 600;
         text-align: center;
 

@@ -42,7 +42,7 @@
       <button class="meetingRoom-container-right-middle-tabs">
         <span class="meetingRoom-container-right-middle-tabs-people">
           <img src="../assets/group-icon.svg" alt="people">
-          People
+          People ({{ usersInRoomList.length }})
         </span>
       </button>
       <button class="meetingRoom-container-right-middle-tabs">
@@ -53,6 +53,18 @@
       </button>
     </div>
     <div class="meetingRoom-container-right-bottom">
+      <ul class="userList">
+        <li v-for="user in usersInRoomList" :key="user.userName" class="userList-item">
+          <div class="userList-item-video">
+            <span class="userList-item-video-initials">
+            {{ getInitials(user.userName) }}
+            </span>
+          </div>
+          <div class="userList-item-name">
+            {{ user.userName }}
+          </div>
+        </li>
+      </ul>
     </div>
   </section>
 </div>  
@@ -60,6 +72,7 @@
 
 <script>
 import Peer from 'peerjs';
+import { mapActions, mapGetters } from 'vuex';
 
 export default {
   name: 'MeetingRoom',
@@ -73,10 +86,24 @@ export default {
       toggleVideoValue: true,
     }
   },
+  computed: {
+    ...mapGetters([
+      'userInfo',
+      'usersInRoomList'
+    ]),
+    getRoomId () {
+      return this.$route.query.roomId
+    }
+  },
   created () {
     this.init()
   },
   methods: {
+    ...mapActions([
+      'addUserToRoom',
+      'removerUserFromRoom',
+      'removeAllUserFromRoom'
+    ]),
     addVideoStream (videoElement, videoStream) {
       const videoGrid = document.getElementById('videoGrid')
       videoElement.srcObject = videoStream
@@ -86,15 +113,25 @@ export default {
       videoGrid.append(videoElement)
     },
 
-    addNewUserToRoom (userId, videoStream) {
-      const mediaConnection = this.peerRef.call(userId, videoStream)
+    addNewUserToRoom (userData, videoStream) {
+      const dataConnection = this.peerRef.connect(userData.userId)
+      const mediaConnection = this.peerRef.call(userData.userId, videoStream)
+      dataConnection.on('open', () => {
+        dataConnection.send({
+          userName: this.userInfo.userName
+        })
+      })
       let videoElement
       mediaConnection.on('stream', (stream) => {
+        this.addUserToRoom({
+          userName: userData.userName,
+          stream: stream,
+        })
         const remoteVideoElement = document.getElementById(`video-${mediaConnection.peer}`)
         if (remoteVideoElement) {
           remoteVideoElement.srcObject = stream
         } else {
-          videoElement = this.createVideoElement(userId)
+          videoElement = this.createVideoElement(userData.userId)
           this.addVideoStream(videoElement, stream)
         }
       })
@@ -102,7 +139,7 @@ export default {
         console.log('close')
         videoElement.remove()
       })
-      this.userMediaConnectionList[userId] = mediaConnection
+      this.userMediaConnectionList[userData.userId] = mediaConnection
     },
 
     createVideoElement (userId) {
@@ -110,6 +147,13 @@ export default {
       videoElement.classList.add("video-container-video")
       videoElement.id = `video-${userId}`
       return videoElement
+    },
+
+    getInitials (userName) {
+      if (userName) {
+        return userName.match(/(\b\S)?/g).join("").toUpperCase()  
+      }
+      return 'SS'
     },
 
     toggleMic () {
@@ -146,6 +190,7 @@ export default {
       this.localVideoStream.getTracks().forEach(track => {
         track.stop()
       });
+      this.removeAllUserFromRoom()
       this.$router.push({name: 'Home'})
     },
 
@@ -153,13 +198,19 @@ export default {
       this.peerRef = new Peer()
       this.peerRef.on('open', (id) => {
         this.currentUserId = id
-        this.$socket.emit('join-room', this.$route.query.roomId, id)
+        const payload = {
+          roomId: this.getRoomId,
+          userId: id,
+          userName: this.userInfo.userName
+        }
+        this.$socket.emit('join-room', payload)
         this.getMedia()
       })
 
-      this.sockets.subscribe('peer-disconnected', (userId) => {
-        if (this.userMediaConnectionList[userId]) {
-          this.userMediaConnectionList[userId].close()
+      this.sockets.subscribe('peer-disconnected', (userData) => {
+        if (this.userMediaConnectionList[userData.userId]) {
+          this.userMediaConnectionList[userData.userId].close()
+          this.removerUserFromRoom(userData)
         }
       });
     },
@@ -174,6 +225,10 @@ export default {
         this.localVideoStream = stream
         this.setControlValue()
         this.addVideoStream(myVideo, stream)
+        this.addUserToRoom({
+          userName: this.userInfo.userName,
+          stream: this.localVideoStream,
+        })
         this.peerRef.on('call', (mediaConnection) => {
           if (!this.userMediaConnectionList[mediaConnection.peer]) {
             this.userMediaConnectionList[mediaConnection.peer] = mediaConnection
@@ -193,8 +248,16 @@ export default {
             videoElement.remove()
           })
         })
-        this.sockets.subscribe('peer-connected', (peerId) => {
-          this.addNewUserToRoom(peerId, stream)
+        this.peerRef.on('connection', (dataConnection) => {
+          dataConnection.on('open', () => {
+            console.log(dataConnection)
+            dataConnection.on('data', (data) => {
+              this.addUserToRoom(data)
+            })
+          })
+        })
+        this.sockets.subscribe('peer-connected', (data) => {
+          this.addNewUserToRoom(data, stream)
         })
       } catch (err) {
         alert(err)
@@ -218,6 +281,46 @@ export default {
 
 $box-shadow: 0 1px 3px 0 rgba(60,64,67,0.302), 0 4px 8px 3px rgba(60,64,67,0.149);
 
+.userList {
+  list-style-type: none;
+  padding: 0px;
+  margin: 10px 0px 0px 0px;
+  &-item {
+    display: flex;
+    align-items: center;
+    height: 56px;
+    min-height: 56px;
+    padding: 0px;
+    margin:2px 0px 0px 0px;
+    border-top: 1px solid #efeff0;
+    border-bottom: 1px solid #efeff0;
+    &-video {
+      flex: .3;
+      height: 100%;
+      background-color: #efeff0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      &-initials {
+        width: 35px;
+        height: 35px;
+        background-color: #791091;
+        color: #fff;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: .8rem;
+      }
+    }
+    &-name {
+      flex: 0.7;
+      font-size: .9rem;
+      text-align: left;
+      margin-left: 8px;
+    }
+  }
+}
 .meetingRoom {
   &-container {
     display: flex;
